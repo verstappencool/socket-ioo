@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat App</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f4f4f4;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+
+      #nameContainer,
+      #chatContainer,
+      #roomContainer {
+        width: 100%;
+        max-width: 600px;
+        margin: 20px;
+      }
+
+      #nameForm,
+      #roomForm,
+      #form {
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      #nameForm input,
+      #roomForm input,
+      #form input,
+      #form button {
+        width: 100%;
+        padding: 10px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+
+      #nameForm button,
+      #roomForm button,
+      #form button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 10px 8px;
+      }
+
+      #nameForm button:hover,
+      #roomForm button:hover,
+      #form button:hover {
+        background-color: #0056b3;
+      }
+
+      #message {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      #message li {
+        background: #fff;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 5px;
+      }
+
+      #message li:nth-child(odd) {
+        background: #f9f9f9;
+      }
+
+      #message li span {
+        font-weight: bold;
+        color: #007bff;
+      }
+
+      #currentRoom {
+        margin: 10px 0;
+        font-size: 18px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="nameContainer">
+      <form id="nameForm">
+        <input type="text" id="name" placeholder="Enter your name" required />
+        <button type="submit">Set Name</button>
+      </form>
+    </div>
+
+    <div id="roomContainer" style="display: none">
+      <form id="roomForm">
+        <input type="text" id="room" placeholder="Enter room name" required />
+        <button type="submit" class="join">Create/Join Room</button>
+      </form>
+      <ul id="roomList"></ul>
+    </div>
+
+    <div id="chatContainer" style="display: none">
+      <div id="currentRoom"></div>
+      <ul id="message"></ul>
+      <form id="form">
+        <input type="text" id="input" placeholder="Type a message" required />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+
+    <script type="module">
+      import { io } from "https://cdn.socket.io/4.7.5/socket.io.esm.min.js";
+      const socket = io(); // Inisialisasi koneksi Socket.IO
+
+      const nameForm = document.getElementById("nameForm");
+      const nameInput = document.getElementById("name");
+      const roomForm = document.getElementById("roomForm");
+      const roomInput = document.getElementById("room");
+      const roomList = document.getElementById("roomList");
+      const chatContainer = document.getElementById("chatContainer");
+      const messageList = document.getElementById("message");
+      const messageForm = document.getElementById("form");
+      const messageInput = document.getElementById("input");
+      const currentRoomElement = document.getElementById("currentRoom");
+
+      let currentRoomId = "";
+      let currentRoomName = "";
+
+      async function loadRooms() {
+        try {
+          const response = await fetch("/api/rooms");
+          if (!response.ok) throw new Error("Network response was not ok");
+          const rooms = await response.json();
+          roomList.innerHTML = ""; // Clear room list before adding new ones
+          rooms.forEach((room) => {
+            const item = document.createElement("li");
+            item.textContent = room.name;
+            item.dataset.roomId = room.id;
+            item.style.cursor = "pointer";
+            item.addEventListener("click", function () {
+              handleRoomSetting(room.id, room.name);
+            });
+            roomList.appendChild(item);
+          });
+        } catch (error) {
+          console.error("Error loading rooms:", error);
+        }
+      }
+
+      async function loadMessages(roomId) {
+        try {
+          const response = await fetch(`/api/messages/${roomId}`);
+          if (!response.ok) throw new Error("Network response was not ok");
+          const messages = await response.json();
+          messageList.innerHTML = ""; // Clear messages before loading new ones
+          messages.forEach((message) => {
+            const item = document.createElement("li");
+            item.textContent = `${message.name}: ${message.message}`;
+            messageList.appendChild(item);
+          });
+          messageList.scrollTop = messageList.scrollHeight; // Scroll ke bawah otomatis
+        } catch (error) {
+          console.error("Error loading messages:", error);
+        }
+      }
+
+      function handleNameSetting(name) {
+        localStorage.setItem("username", name);
+        document.getElementById("nameContainer").style.display = "none";
+        document.getElementById("roomContainer").style.display = "block";
+        loadRooms();
+      }
+
+      function handleRoomSetting(roomId, roomName) {
+        currentRoomId = roomId;
+        currentRoomName = roomName;
+        currentRoomElement.textContent = `Current Room: ${roomName}`;
+        socket.emit("join room", roomId);
+        chatContainer.style.display = "block";
+        roomForm.style.display = "none";
+        loadMessages(roomId);
+      }
+
+      const savedName = localStorage.getItem("username");
+      if (savedName) {
+        handleNameSetting(savedName);
+      } else {
+        nameForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          const name = nameInput.value.trim();
+          if (name) {
+            handleNameSetting(name);
+          }
+        });
+      }
+
+      roomForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const roomName = roomInput.value.trim();
+        if (roomName) {
+          socket.emit("create room", roomName);
+          roomInput.value = "";
+          window.location.reload();
+        }
+      });
+
+      messageForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const name = localStorage.getItem("username");
+        const message = messageInput.value.trim();
+        if (name && message && currentRoomId) {
+          socket.emit("chat message", { name, message, roomId: currentRoomId });
+          messageInput.value = "";
+        }
+      });
+
+      socket.on("chat message", function (data) {
+        if (data.roomId === currentRoomId) {
+          const item = document.createElement("li");
+          item.textContent = `${data.name}: ${data.message}`;
+          messageList.appendChild(item);
+          messageList.scrollTop = messageList.scrollHeight; // Scroll ke bawah otomatis
+        }
+      });
+
+      socket.on("room created", function (room) {
+        const item = document.createElement("li");
+        item.textContent = room.name;
+        item.dataset.roomId = room.id;
+        item.style.cursor = "pointer";
+        item.addEventListener("click", function () {
+          handleRoomSetting(room.id, room.name);
+        });
+        roomList.appendChild(item);
+      });
+    </script>
+  </body>
+</html>

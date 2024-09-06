@@ -1,0 +1,14 @@
+{
+    "version": 2,
+    "functions": {
+      "api/index.js": {
+        "runtime": "nodejs18.x"
+      }
+    },
+    "public": "public",
+    "rewrites": [
+      { "source": "/", "destination": "/public/index.html" },
+      { "source": "/api/(.*)", "destination": "/api/index.js" }
+    ]
+  }
+  
