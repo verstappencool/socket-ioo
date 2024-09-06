@@ -5,7 +5,6 @@
         "runtime": "nodejs18.x"
       }
     },
-    "public": "true",
     "rewrites": [
       { "source": "/", "destination": "/public/index.html" },
       { "source": "/api/(.*)", "destination": "/api/index.js" }
